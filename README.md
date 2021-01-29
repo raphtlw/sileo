@@ -30,6 +30,6 @@ If you think about it, the "cloud" is basically just someone elses computer. Whe
 When you tell Sileo to process your files, it:
 1. (If needed) will archive the folder into a tar file
 2. Compresses the file with gzip
-2. Secures your data with the SHA256 algorithm via symmetrical PGP encryption
+2. Secures your data with the [age](https://github.com/FiloSottile/age) encryption format
 3. Applies an MD5 hashing algorithm in order to ensure data integrity, i.e. your data has not been modified after being downloaded from the cloud
 4. Uploads the compressed, optimized and secured file to the cloud storage of your choice or spit it out so you can do whatever you wish to do with it

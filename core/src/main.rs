@@ -7,7 +7,6 @@ use util::*;
 use clap::{App, Arg};
 use clap_v3 as clap;
 use once_cell::sync::Lazy;
-use sequoia_openpgp::{parse::Parse, Cert};
 use std::{
     env,
     error::Error,
@@ -43,11 +42,11 @@ static DATA_DIR: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
 //     Mutex::new(path)
 // });
 
-static PRIVATE_KEY_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
-    let mut path = PathBuf::from(DATA_DIR.lock().unwrap().clone());
-    path.push("private.key");
-    Mutex::new(path)
-});
+// static PRIVATE_KEY_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
+//     let mut path = PathBuf::from(DATA_DIR.lock().unwrap().clone());
+//     path.push("private.key");
+//     Mutex::new(path)
+// });
 
 static LOG_FILE_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
     let mut path = PathBuf::from(TEMP_DIR.lock().unwrap().clone());
@@ -128,23 +127,29 @@ fn main() -> Result<(), Box<dyn Error>> {
                 compress_file(&archive_path, compressed_archive_path)?;
 
                 let encrypted_file_path =
-                    format!("{}.pgp", compressed_archive_path.to_string_lossy());
+                    format!("{}.age", compressed_archive_path.to_string_lossy());
                 let encrypted_file_path = Path::new(&encrypted_file_path);
 
-                // generate key if not found
-                let pgp_key = if !PRIVATE_KEY_PATH.lock()?.clone().exists() {
-                    log::info!("Generating PGP key...");
-                    generate_key()?
-                } else {
-                    log::info!("PGP key already exists, using existing key...");
-                    Cert::from_file(PRIVATE_KEY_PATH.lock()?.clone())?
-                };
+                // // generate key if not found
+                // let pgp_key = if !PRIVATE_KEY_PATH.lock()?.clone().exists() {
+                //     log::info!("Generating PGP key...");
+                //     generate_key()?;
+                // } else {
+                //     log::info!("PGP key already exists, using existing key...");
+                //     Cert::from_file(PRIVATE_KEY_PATH.lock()?.clone())?
+                // };
+
+                let password = dialoguer::Password::new()
+                    .with_prompt("New Password")
+                    .with_confirmation("Confirm Password", "Passwords mismatch!")
+                    .interact()?;
 
                 log::info!("Encrypting file...");
-                encrypt_file(compressed_archive_path, encrypted_file_path, pgp_key)?;
+                encrypt_file(compressed_archive_path, encrypted_file_path, password)?;
 
                 log::info!("Applying checksum...");
                 let checksum = apply_checksum(encrypted_file_path)?;
+
                 log::info!("Verifying checksum...");
                 let checksum_verified = verify_checksum(encrypted_file_path, &checksum)?;
                 if !checksum_verified {
@@ -172,7 +177,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 log::info!("Verifying checksum...");
                 let checksum_list = fs::read_to_string(CHECKSUM_PATH.lock()?.clone())?;
-                log::debug!("Checksum list: {}", checksum_list);
+                log::debug!("Checksum list: {}", checksum_list.trim());
                 let checksum = checksum_list
                     .split("\n")
                     .find(|&x| x.split("=").collect::<Vec<&str>>()[0] == file_name)
@@ -185,28 +190,30 @@ fn main() -> Result<(), Box<dyn Error>> {
                     panic!("Checksum not valid!");
                 }
 
-                log::info!("Reading existing PGP key...");
-                let key = Cert::from_file(PRIVATE_KEY_PATH.lock()?.clone())?;
+                let decrypted_file_path_str = file_name.replace(".age", "");
+                let mut decrypted_file_path = PathBuf::from(TEMP_DIR.lock()?.clone());
+                decrypted_file_path.push(decrypted_file_path_str);
 
-                let decrypted_file_path_str = full_path.to_string_lossy().replace(".pgp", "");
-                let decrypted_file_path = Path::new(&decrypted_file_path_str);
+                let password = dialoguer::Password::new()
+                    .with_prompt("Password")
+                    .interact()?;
 
                 log::info!("Decrypting file...");
-                decrypt_file(&full_path, decrypted_file_path, key)?;
+                decrypt_file(&full_path, &decrypted_file_path, password)?;
 
-                let uncompressed_file_path_str = decrypted_file_path_str.replace(".gz", "");
+                let uncompressed_file_path_str =
+                    decrypted_file_path.to_string_lossy().replace(".gz", "");
                 let uncompressed_file_path = Path::new(&uncompressed_file_path_str);
 
                 log::info!("Uncompressing archive/file...");
-                uncompress_file(decrypted_file_path, uncompressed_file_path)?;
+                uncompress_file(&decrypted_file_path, uncompressed_file_path)?;
 
                 if uncompressed_file_path_str.contains(".tar") {
                     log::info!("File is archive");
                     log::info!("Unarchiving file...");
 
-                    let output_path_str = uncompressed_file_path_str.replace(".tar", "");
-                    let output_path = Path::new(&output_path_str);
-                    unarchive_folder(uncompressed_file_path, output_path)?;
+                    let output_path = env::current_dir()?;
+                    unarchive_folder(uncompressed_file_path, &output_path)?;
                 }
 
                 log::info!("Done!");
