@@ -154,3 +154,25 @@ pub fn generate_key() -> Result<(SignedSecretKey, PublicKey), Box<dyn Error>> {
 
     Ok((signed_secret_key, public_key))
 }
+
+pub fn apply_checksum(filepath: &Path) -> Result<String, Box<dyn Error>> {
+    let file_bytes = fs::read(filepath)?;
+    let digest = md5::compute(file_bytes);
+
+    let checksum = format!("{:x}", digest);
+
+    Ok(checksum)
+}
+
+pub fn verify_checksum(filepath: &Path, checksum: &String) -> Result<bool, Box<dyn Error>> {
+    let file_bytes = fs::read(filepath)?;
+    let digest = md5::compute(file_bytes);
+
+    let file_checksum = format!("{:x}", digest);
+
+    if &file_checksum == checksum {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}

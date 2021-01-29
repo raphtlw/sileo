@@ -41,6 +41,12 @@ static LOG_FILE_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
     Mutex::new(path)
 });
 
+static CHECKSUM_PATH: Lazy<Mutex<PathBuf>> = Lazy::new(|| {
+    let mut path = PathBuf::from(DATA_DIR.lock().unwrap().clone());
+    path.push("checksums.txt");
+    Mutex::new(path)
+});
+
 fn main() -> Result<(), Box<dyn Error>> {
     fern::Dispatch::new()
         .format(|out, message, record| {
@@ -118,6 +124,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                 secret_key,
                 public_key,
             )?;
+
+            log::info!("Applying checksum...");
+            let checksum = apply_checksum(encrypted_file_path)?;
+            log::info!("Verifying checksum...");
+            let checksum_verified = verify_checksum(encrypted_file_path, &checksum)?;
+
+            if !checksum_verified {
+                panic!("Checksum not valid!");
+            }
+
+            let checksum_file_name = encrypted_file_path.file_name().unwrap().to_str().unwrap();
+
+            let checksum_map_line = format!("{}={}", checksum_file_name, &checksum);
+
+            fs::write(CHECKSUM_PATH.lock()?.clone(), checksum_map_line)?;
         } else {
             panic!("Input path doesn't exist!");
         }
